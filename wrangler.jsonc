@@ -5,6 +5,15 @@
   "compatibility_date": "2026-09-05",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "kv_namespaces": [
+    {
+      "binding": "DUCKY_STATE",
+      "id": "3b230ae53f2a4168a774ce4db8a71e75"
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
