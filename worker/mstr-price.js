@@ -57,10 +57,11 @@ async function updateDuckyState(env) {
   let lastBlock = state.lastBlock;
   let totalWei = BigInt(state.totalWei);
   let sweeps = state.sweeps;
+  const targetBlock = Math.min(latestBlock, lastBlock + 400);
 
-  while (lastBlock < latestBlock) {
+  while (lastBlock < targetBlock) {
     const fromBlock = lastBlock + 1;
-    const toBlock = Math.min(fromBlock + 9, latestBlock);
+    const toBlock = Math.min(fromBlock + 9, targetBlock);
     const logs = await rpc(env.ROBINHOOD_RPC_URL, "eth_getLogs", [{
       fromBlock: `0x${fromBlock.toString(16)}`,
       toBlock: `0x${toBlock.toString(16)}`,
