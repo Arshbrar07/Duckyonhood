@@ -1,8 +1,83 @@
 const ROBINHOOD_MSTR_URL = "https://api.robinhood.com/rhj/prices/MSTR";
+const BLOCKSCOUT_TOKEN_URL = "https://robinhoodchain.blockscout.com/api/v2/tokens/0x6C08a59f65D9979aB848D6788DAd111db754d90D";
+const BLOCKSCOUT_LOGS_URL = "https://robinhoodchain.blockscout.com/api";
+const DUCKY_TOKEN = "0x6C08a59f65D9979aB848D6788DAd111db754d90D";
+const MSTR_TOKEN = "0xec262a75e413fAfD0dF80480274532C79D42da09";
+const FEE_RECIPIENT = "0xB2fb19F669081c8f600fC34E9DF013D1eF99ACE1";
+const FEE_ESCROW = "0xd3AFEB2a57f70eF218Aa82451c51B2fb0416Ac9e";
+const FIRST_FEE_BLOCK = 55060000;
+const CREDITED_TOKEN_TOPIC = "0x5d104c62f50449fadfe6f4013c8f36588d32737f94b5ac9b83ddad33b3e1ffdf";
+const VERIFIED_SNAPSHOT = {
+  token: { address: DUCKY_TOKEN, name: "Mr. Ducky", symbol: "DUCKY", holders: 57 },
+  rewardAsset: { address: MSTR_TOKEN, symbol: "MSTR" },
+  creatorFees: { credited: "3.220370", sweeps: 20 },
+  feeRecipient: FEE_RECIPIENT,
+  explorerUrl: `https://robinhoodchain.blockscout.com/token/${DUCKY_TOKEN}`,
+  updatedAt: "2026-09-05T11:26:00.000Z",
+  source: "verified-snapshot",
+};
+
+function topicAddress(address) {
+  return "0x" + address.toLowerCase().slice(2).padStart(64, "0");
+}
+
+function formatTokenAmount(value, decimals = 18, places = 6) {
+  const base = 10n ** BigInt(decimals);
+  const whole = value / base;
+  const fraction = (value % base).toString().padStart(decimals, "0").slice(0, places);
+  return `${whole}.${fraction}`;
+}
+
+async function fetchDuckyData() {
+  const logsUrl = new URL(BLOCKSCOUT_LOGS_URL);
+  logsUrl.search = new URLSearchParams({
+    module: "logs",
+    action: "getLogs",
+    fromBlock: String(FIRST_FEE_BLOCK),
+    toBlock: "latest",
+    address: FEE_ESCROW,
+    topic0: CREDITED_TOKEN_TOPIC,
+  }).toString();
+  const logsPromise = fetch(logsUrl, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "Mozilla/5.0 (compatible; DuckyRewards/1.0; +https://mrducky.xyz)",
+    },
+    cf: { cacheEverything: true, cacheTtl: 30 },
+  }).then(async (response) => {
+    const payload = await response.json();
+    if (!response.ok || payload.status !== "1") throw new Error("Explorer log request failed");
+    return payload.result.filter((log) =>
+      log.topics?.[1]?.toLowerCase() === topicAddress(FEE_RECIPIENT) &&
+      log.topics?.[2]?.toLowerCase() === topicAddress(MSTR_TOKEN));
+  });
+  const holderPromise = fetch(BLOCKSCOUT_TOKEN_URL, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "Mozilla/5.0 (compatible; DuckyRewards/1.0; +https://mrducky.xyz)",
+    },
+    cf: { cacheEverything: true, cacheTtl: 30 },
+  }).then((response) => response.ok ? response.json() : null);
+
+  const [logs, tokenInfo] = await Promise.all([logsPromise, holderPromise]);
+  const totalCredited = logs.reduce((sum, log) => sum + BigInt(log.data), 0n);
+
+  return {
+    token: { address: DUCKY_TOKEN, name: "Mr. Ducky", symbol: "DUCKY", holders: Number(tokenInfo?.holders_count || 0) },
+    rewardAsset: { address: MSTR_TOKEN, symbol: "MSTR" },
+    creatorFees: { credited: formatTokenAmount(totalCredited), sweeps: logs.length },
+    feeRecipient: FEE_RECIPIENT,
+    explorerUrl: `https://robinhoodchain.blockscout.com/token/${DUCKY_TOKEN}`,
+    updatedAt: new Date().toISOString(),
+    source: "live-on-chain",
+  };
+}
 
 function corsHeaders(origin) {
   const allowed =
     origin === "https://duckyonhood.pages.dev" ||
+    origin === "https://mrducky.xyz" ||
+    origin === "https://www.mrducky.xyz" ||
     /^https:\/\/[a-z0-9-]+\.duckyonhood\.pages\.dev$/.test(origin);
 
   return {
@@ -23,11 +98,18 @@ export default {
       return new Response(null, { status: 204, headers });
     }
 
-    if (request.method !== "GET" || url.pathname !== "/mstr-price") {
+    if (request.method !== "GET" || !["/mstr-price", "/ducky-data"].includes(url.pathname)) {
       return Response.json({ error: "Not found" }, { status: 404, headers });
     }
 
     try {
+      if (url.pathname === "/ducky-data") {
+        const data = await fetchDuckyData();
+        return Response.json(data, {
+          headers: { ...headers, "Cache-Control": "public, max-age=30" },
+        });
+      }
+
       const upstream = await fetch(ROBINHOOD_MSTR_URL, {
         headers: { Accept: "application/json" },
         cf: { cacheEverything: true, cacheTtl: 15 },
@@ -49,9 +131,14 @@ export default {
         },
       });
     } catch (error) {
-      console.error(JSON.stringify({ event: "mstr_price_fetch_failed", message: String(error) }));
+      console.error(JSON.stringify({ event: "upstream_fetch_failed", path: url.pathname, message: String(error) }));
+      if (url.pathname === "/ducky-data") {
+        return Response.json(VERIFIED_SNAPSHOT, {
+          headers: { ...headers, "Cache-Control": "public, max-age=300", "X-Data-Source": "verified-snapshot" },
+        });
+      }
       return Response.json(
-        { error: "Price service temporarily unavailable" },
+        { error: "Live data temporarily unavailable" },
         { status: 502, headers },
       );
     }

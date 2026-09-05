@@ -314,19 +314,19 @@ footer .fine{font-size:0.82rem; color:var(--ink-soft); max-width:560px; margin:0
 <section id="rewards">
   <div class="section-head">
     <h2>$MSTR rewards</h2>
-    <p>A portion of eligible creator fees is intended to be converted into tokenized $MSTR and distributed to qualifying $DUCKY holders once the reward system is activated.</p>
+    <p>$DUCKY trades directly against tokenized $MSTR on Pons v2. Creator-fee credits are tracked here from Robinhood Chain.</p>
   </div>
   <div class="reward-flow" aria-label="How Ducky rewards work">
-    <div class="flow-step"><b>1 · Trade</b><span>Pons v2 creator fees accrue from trading</span></div>
+    <div class="flow-step"><b>1 · Trade</b><span>$DUCKY trades against its $MSTR pairing asset</span></div>
     <div class="flow-arrow" aria-hidden="true">→</div>
-    <div class="flow-step"><b>2 · Prepare</b><span>Eligible fees are intended for $MSTR conversion after activation</span></div>
+    <div class="flow-step"><b>2 · Accrue</b><span>Pons creator fees accrue directly in $MSTR</span></div>
     <div class="flow-arrow" aria-hidden="true">→</div>
-    <div class="flow-step"><b>3 · Reward</b><span>Final rules and contracts will be published before rewards begin</span></div>
+    <div class="flow-step"><b>3 · Route</b><span>Fee credits route to the configured distributor contract</span></div>
   </div>
   <div class="rewards-grid">
     <div class="reward-card">
       <h3><span class="live-dot" aria-hidden="true"></span>$MSTR Stock Token</h3>
-      <div class="sub">Live from Robinhood Chain — the planned reward asset</div>
+      <div class="sub">Live from Robinhood Chain — $DUCKY's pairing and reward asset</div>
       <div class="price-row">
         <span class="big" id="mstr-price">—</span>
         <span class="chg" id="mstr-change">loading…</span>
@@ -341,19 +341,19 @@ footer .fine{font-size:0.82rem; color:var(--ink-soft); max-width:560px; margin:0
       <p class="feed-note" id="mstr-status">Pulling directly from Robinhood Chain's public Stock Token API (refreshes every 15s).</p>
     </div>
     <div class="reward-card">
-      <h3>Reward system</h3>
-      <div class="sub">Final distribution rules will be published before rewards begin</div>
+      <h3><span class="live-dot" aria-hidden="true"></span>Creator fees</h3>
+      <div class="sub">Verified from Pons fee-escrow events on Robinhood Chain</div>
       <div class="status-panel">
-        <span class="status-badge">Launching soon</span>
-        <strong>Preparing the nest</strong>
-        <p>$MSTR rewards are planned for after launch. We will publish the cadence, eligibility rules and on-chain contracts before the first distribution.</p>
+        <span class="status-badge" id="fee-status">Loading on-chain data</span>
+        <strong><span id="creator-fees">—</span> MSTR</strong>
+        <p>Credited to DUCKY across <b id="sweep-count">—</b> on-chain sweeps.</p>
       </div>
       <ul class="reward-list">
         <li><span>Reward asset</span><span>$MSTR</span></li>
-        <li><span>Current status</span><span>Pre-launch</span></li>
-        <li><span>Distribution timing</span><span>To be announced</span></li>
+        <li><span>Token holders</span><span id="holder-count">—</span></li>
+        <li><span>Contract</span><span><a href="https://robinhoodchain.blockscout.com/token/0x6C08a59f65D9979aB848D6788DAd111db754d90D" target="_blank" rel="noopener">0x6C08…d90D ↗</a></span></li>
       </ul>
-      <div class="config-note">No staking or claiming requirements, minimum holding, payout amount, or distribution cadence has been confirmed yet.</div>
+      <div class="config-note" id="fee-note">Creator fees are assigned to the configured fee-distributor contract. Credits shown here do not by themselves prove that holder payouts have completed.</div>
     </div>
   </div>
 </section>
@@ -513,6 +513,34 @@ footer .fine{font-size:0.82rem; color:var(--ink-soft); max-width:560px; margin:0
   }
   fetchMstr();
   setInterval(fetchMstr, 15000);
+})();
+
+// Live DUCKY creator-fee credits from Pons contracts on Robinhood Chain.
+(function(){
+  var feesEl = document.getElementById('creator-fees');
+  var sweepsEl = document.getElementById('sweep-count');
+  var holdersEl = document.getElementById('holder-count');
+  var statusEl = document.getElementById('fee-status');
+  var noteEl = document.getElementById('fee-note');
+
+  async function fetchDuckyData(){
+    try{
+      var res = await fetch('https://duckyonhood-mstr-price.arshbrar99-as83.workers.dev/ducky-data');
+      if(!res.ok) throw new Error('bad response');
+      var data = await res.json();
+      feesEl.textContent = data.creatorFees.credited;
+      sweepsEl.textContent = data.creatorFees.sweeps;
+      holdersEl.textContent = data.token.holders || '—';
+      statusEl.textContent = data.source === 'live-on-chain' ? 'Live on-chain' : 'Verified snapshot';
+      noteEl.textContent = 'Creator fees are assigned to the configured fee-distributor contract. Credits shown here do not by themselves prove that holder payouts have completed.';
+    }catch(e){
+      statusEl.textContent = 'Feed temporarily unavailable';
+      noteEl.textContent = 'The contract links remain available while the live on-chain feed reconnects.';
+    }
+  }
+
+  fetchDuckyData();
+  setInterval(fetchDuckyData, 30000);
 })();
 
 </script>
