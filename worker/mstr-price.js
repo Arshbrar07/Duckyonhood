@@ -36,7 +36,9 @@ async function rpc(rpcUrl, method, params) {
   });
   const payload = await response.json();
   if (!response.ok || payload.error || payload.result === undefined) {
-    throw new Error(`RPC ${method} failed`);
+    const code = payload.error?.code ?? response.status;
+    const message = payload.error?.message ?? "invalid RPC response";
+    throw new Error(`RPC ${method} failed (${code}): ${message}`);
   }
   return payload.result;
 }
